@@ -1,13 +1,24 @@
-from fastapi import APIRouter
-from ms_productos.models import Producto
-from ms_productos.database import productos_collection
+from fastapi import APIRouter, HTTPException
+from models.producto import Producto
+from config.db import collection_productos
 
 router = APIRouter()
 
-@router.get("/productos", response_model=list[Producto])
-def get_productos():
-    return list(productos_collection.find({}, {"_id": 0}))
+# GET - Listar todos los productos
+@router.get("/productos")
+async def obtener_productos():
+    productos = []
+    async for producto in collection_productos.find():
+        producto["_id"] = str(producto["_id"])
+        productos.append(producto)
+    return productos
 
-@router.get("/productos/{id}", response_model=Producto)
-def get_producto(id: int):
-    return productos_collection.find_one({"id": id}, {"_id": 0})
+# POST - Crear un producto nuevo
+@router.post("/productos")
+async def crear_producto(producto: Producto):
+    nuevo = producto.model_dump()
+    result = await collection_productos.insert_one(nuevo)
+    if result.inserted_id:
+        return {"_id": str(result.inserted_id), **nuevo}
+    else:
+        raise HTTPException(status_code=500, detail="No se pudo crear el producto")

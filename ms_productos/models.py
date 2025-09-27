@@ -1,16 +1,57 @@
-# ms_productos/models.py
-from pydantic import BaseModel, Field
-from typing import Optional
+from fastapi import APIRouter, HTTPException
+from models import Producto, ProductoUpdate
+from config.db import collection_productos
+from bson import ObjectId
 
-class Producto(BaseModel):
-    id: Optional[str] = None
-    nombre: str = Field(..., min_length=1, max_length=100)
-    descripcion: str = Field(..., min_length=1, max_length=300)
-    precio: float = Field(..., gt=0)
-    stock: int = Field(..., ge=0)
+router = APIRouter()
 
-class ProductoUpdate(BaseModel):
-    nombre: Optional[str] = Field(None, min_length=1, max_length=100)
-    descripcion: Optional[str] = Field(None, min_length=1, max_length=300)
-    precio: Optional[float] = Field(None, gt=0)
-    stock: Optional[int] = Field(None, ge=0)
+# GET - Listar todos los productos
+@router.get("/productos")
+async def obtener_productos():
+    productos = []
+    async for producto in collection_productos.find():
+        producto["_id"] = str(producto["_id"])
+        productos.append(producto)
+    return productos
+
+
+# POST - Crear un producto nuevo
+@router.post("/productos")
+async def crear_producto(producto: Producto):
+    nuevo = producto.model_dump(exclude={"id"})  # excluye id, Mongo lo genera
+    result = await collection_productos.insert_one(nuevo)
+    if result.inserted_id:
+        return {"_id": str(result.inserted_id), **nuevo}
+    else:
+        raise HTTPException(status_code=500, detail="No se pudo crear el producto")
+
+
+# PUT - Actualizar un producto por id
+@router.put("/productos/{producto_id}")
+async def actualizar_producto(producto_id: str, producto: ProductoUpdate):
+    actualizacion = {k: v for k, v in producto.model_dump().items() if v is not None}
+
+    if not actualizacion:
+        raise HTTPException(status_code=400, detail="No hay datos para actualizar")
+
+    result = await collection_productos.update_one(
+        {"_id": ObjectId(producto_id)}, {"$set": actualizacion}
+    )
+
+    if result.modified_count == 1:
+        actualizado = await collection_productos.find_one({"_id": ObjectId(producto_id)})
+        actualizado["_id"] = str(actualizado["_id"])
+        return actualizado
+    else:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+
+# DELETE - Eliminar un producto
+@router.delete("/productos/{producto_id}")
+async def eliminar_producto(producto_id: str):
+    result = await collection_productos.delete_one({"_id": ObjectId(producto_id)})
+
+    if result.deleted_count == 1:
+        return {"message": "Producto eliminado correctamente"}
+    else:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
