@@ -10,7 +10,7 @@ COPY requirements.txt .
 # Instalar dependencias
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el resto del código
+# Copiar todo el código del proyecto (incluyendo ms_productos/)
 COPY . .
 
 # Exponer el puerto que usa Uvicorn
