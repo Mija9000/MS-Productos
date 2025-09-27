@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException
 from bson import ObjectId
 from ms_productos.models import Producto, ProductoUpdate
 from ms_productos.database import collection_productos
-
+import boto3
+from botocore.config import Config
 router = APIRouter()
 
 # GET - Listar todos los productos
@@ -49,3 +50,29 @@ async def eliminar_producto(producto_id: str):
     if result.deleted_count == 1:
         return {"message": "Producto eliminado correctamente"}
     raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+
+# Parte para pre-signed url 
+BUCKET_NAME = "ecommerce01bucket"  
+
+@router.get("/generate-presigned-url")
+async def generate_presigned_url(file_name: str):
+    """
+    Genera un URL temporal para que el frontend pueda subir una imagen a S3.
+    Devuelve:
+    - uploadUrl: URL con firma para hacer PUT desde el front
+    - publicUrl: URL final que se puede guardar en imageUrl
+    """
+    s3 = boto3.client("s3", config=Config(signature_version="s3v4"))
+    try:
+        url = s3.generate_presigned_url(
+            "put_object",
+            Params={"Bucket": BUCKET_NAME, "Key": f"productos/imagenes/{file_name}"},
+            ExpiresIn=3600  # URL válida 1 hora
+        )
+        return {
+            "uploadUrl": url,
+            "publicUrl": f"https://{BUCKET_NAME}.s3.amazonaws.com/productos/imagenes/{file_name}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando URL: {str(e)}")
